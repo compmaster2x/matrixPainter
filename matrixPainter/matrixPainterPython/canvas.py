@@ -1,6 +1,8 @@
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtCore import Qt, QPoint, Signal
+import json
+import copy
 
 
 class Canvas(QWidget):
@@ -8,12 +10,12 @@ class Canvas(QWidget):
 
     def __init__(self):
         super().__init__()
-
+        self.history = []
         self.current_color = QColor(255, 0, 0)
-
+        self.brushSize = 1
         self.GRID_SIZE = 16
         self.CELL_SIZE = 35
-
+        self.drawing = False
         self.pixels = [
             [QColor(0, 0, 0) for _ in range(self.GRID_SIZE)]
             for _ in range(self.GRID_SIZE)
@@ -56,20 +58,18 @@ class Canvas(QWidget):
 
     def mousePressEvent(self, event):
 
-        x = event.position().x()
-        y = event.position().y()
+        if event.button() != Qt.LeftButton:
+            return
 
-        column = int(x // self.CELL_SIZE)
-        row = int(y // self.CELL_SIZE)
+        self.drawing = True
+        self.saveState()
 
-        if self.current_tool == "brush":
-            self.pixels[row][column] = self.current_color
-        else:
-            self.pixels[row][column] = QColor(0, 0, 0)
+        column = int(event.position().x() // self.CELL_SIZE)
+        row = int(event.position().y() // self.CELL_SIZE)
 
-        self.update()
-        self.pixelChanged.emit(column, row, self.pixels[row][column])
-        print(f"Нажата клетка: X={column}, Y={row}")
+        self.paintPixel(column, row)
+
+
 
     def setColor(self, color):
             self.current_color = color
@@ -78,10 +78,149 @@ class Canvas(QWidget):
         self.current_tool = tool
 
     def clearCanvas(self):
-
+        self.saveState()
         for y in range(self.GRID_SIZE):
             for x in range(self.GRID_SIZE):
                 self.pixels[y][x] = QColor(0, 0, 0)
                 
+
+        self.update()
+
+    def mouseMoveEvent(self, event):
+
+        if event.buttons() != Qt.LeftButton:
+            return
+
+        x = int(event.position().x() // self.CELL_SIZE)
+        y = int(event.position().y() // self.CELL_SIZE)
+
+        self.paintPixel(x, y)
+
+    def paintPixel(self, x, y):
+
+        if x < 0 or x >= self.GRID_SIZE:
+            return
+
+        if y < 0 or y >= self.GRID_SIZE:
+            return
+
+        if self.current_tool == "fill":
+            self.fill(x, y)
+            return
+
+        color = self.current_color
+
+        if self.current_tool == "eraser":
+            color = QColor(0, 0, 0)
+
+        for dy in range(self.brushSize):
+            for dx in range(self.brushSize):
+
+                nx = x + dx
+                ny = y + dy
+
+                if nx < 0 or nx >= self.GRID_SIZE:
+                    continue
+
+                if ny < 0 or ny >= self.GRID_SIZE:
+                    continue
+
+                if self.pixels[ny][nx] == color:
+                    continue
+
+                self.pixels[ny][nx] = color
+                self.pixelChanged.emit(nx, ny, color)
+
+        self.update()
+
+    def saveToFile(self, fileName):
+
+        data = []
+
+        for y in range(self.GRID_SIZE):
+
+            row = []
+
+            for x in range(self.GRID_SIZE):
+                color = self.pixels[y][x]
+
+                row.append([
+                    color.red(),
+                    color.green(),
+                    color.blue()
+                ])
+
+            data.append(row)
+
+        with open(fileName, "w") as file:
+            json.dump(data, file)
+
+    def loadFromFile(self, fileName):
+
+        with open(fileName, "r") as file:
+            data = json.load(file)
+
+        for y in range(self.GRID_SIZE):
+            for x in range(self.GRID_SIZE):
+                r, g, b = data[y][x]
+
+                self.pixels[y][x] = QColor(r, g, b)
+
+                self.pixelChanged.emit(x, y, self.pixels[y][x])
+
+        self.update()
+
+    def fill(self, x, y):
+        target = self.pixels[y][x]
+
+        if target == self.current_color:
+            return
+
+        stack = [(x, y)]
+
+        while stack:
+
+            x, y = stack.pop()
+
+            if x < 0 or x >= self.GRID_SIZE:
+                continue
+
+            if y < 0 or y >= self.GRID_SIZE:
+                continue
+
+            if self.pixels[y][x] != target:
+                continue
+
+            self.pixels[y][x] = self.current_color
+            self.pixelChanged.emit(x, y, self.current_color)
+
+            stack.append((x + 1, y))
+            stack.append((x - 1, y))
+            stack.append((x, y + 1))
+            stack.append((x, y - 1))
+
+        self.update()
+
+    def saveState(self):
+        self.history.append(copy.deepcopy(self.pixels))
+
+        if len(self.history) > 20:
+            self.history.pop(0)
+
+    def mouseReleaseEvent(self, event):
+
+        if event.button() == Qt.LeftButton:
+            self.drawing = False
+
+    def undo(self):
+
+        if not self.history:
+            return
+
+        self.pixels = self.history.pop()
+
+        for y in range(self.GRID_SIZE):
+            for x in range(self.GRID_SIZE):
+                self.pixelChanged.emit(x, y, self.pixels[y][x])
 
         self.update()
