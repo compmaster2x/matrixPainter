@@ -1,13 +1,13 @@
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
-    QHBoxLayout, QColorDialog
+    QHBoxLayout, QColorDialog, QFileDialog
 )
 
 from canvas import Canvas
 from control_panel import ControlPanel
 from serial_manager import SerialManager
-
+from PySide6.QtGui import QShortcut, QKeySequence
 
 
 class MainWindow(QMainWindow):
@@ -33,9 +33,15 @@ class MainWindow(QMainWindow):
         self.panel.clearButton.clicked.connect(self.clearCanvas)
         self.panel.connectButton.clicked.connect(self.connectSerial)
         self.panel.disconnectButton.clicked.connect(self.disconnectSerial)
-
+        self.panel.saveButton.clicked.connect(self.saveImage)
+        self.panel.loadButton.clicked.connect(self.loadImage)
+        self.panel.fillButton.clicked.connect(self.selectFill)
+        self.panel.brushSize.currentIndexChanged.connect(self.changeBrushSize)
+        self.undoShortcut = QShortcut(QKeySequence("Ctrl+Z"), self)
+        self.undoShortcut.activated.connect(self.undo)
         layout.addWidget(self.canvas, 1)
         layout.addWidget(self.panel)
+
 
         central.setLayout(layout)
 
@@ -70,6 +76,8 @@ class MainWindow(QMainWindow):
 
         if self.serial.connect(port):
             self.panel.statusLabel.setText(f"🟢 {port}")
+            self.serial.clear()
+            self.canvas.clearCanvas()
         else:
             self.panel.statusLabel.setText("🔴 Ошибка подключения")
 
@@ -81,3 +89,42 @@ class MainWindow(QMainWindow):
 
     def sendPixel(self, x, y, color):
         self.serial.sendPixel(x, y, color)
+
+    def saveImage(self):
+
+        fileName, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить",
+            "",
+            "JSON (*.json)"
+        )
+
+        if not fileName:
+            return
+
+        self.canvas.saveToFile(fileName)
+
+    def loadImage(self):
+
+        fileName, _ = QFileDialog.getOpenFileName(
+            self,
+            "Открыть",
+            "",
+            "JSON (*.json)"
+        )
+
+        if not fileName:
+            return
+
+        self.canvas.loadFromFile(fileName)
+
+    def selectFill(self):
+        self.canvas.setTool("fill")
+
+    def changeBrushSize(self, index):
+        self.canvas.brushSize = index + 1
+        print(self.canvas.brushSize)
+
+    def undo(self):
+        self.canvas.undo()
+
