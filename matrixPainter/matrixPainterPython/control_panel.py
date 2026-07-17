@@ -45,6 +45,22 @@ class ControlPanel(QWidget):
         self.clearButton = QPushButton("Очистить")
         layout.addWidget(self.clearButton)
 
+        self.fillButton = QPushButton("Заливка")
+        layout.addWidget(self.fillButton)
+
+        self.saveButton = QPushButton("Сохранить")
+        layout.addWidget(self.saveButton)
+
+        self.loadButton = QPushButton("Загрузить")
+        layout.addWidget(self.loadButton)
+
+        self.brushSize = QComboBox()
+
+        self.brushSize.addItem("1x1")
+        self.brushSize.addItem("2x2")
+        self.brushSize.addItem("3x3")
+
+        layout.addWidget(self.brushSize)
 
 
         layout.addStretch()
